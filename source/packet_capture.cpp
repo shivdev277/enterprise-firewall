@@ -1,5 +1,24 @@
 #include <iostream>
+#include <iomanip>
 #include <pcap.h>
+#include <netinet/ip.h>
+#include <arpa/inet.h>
+
+void print_mac(const u_char* mac)
+{
+    for (int i = 0; i < 6; i++)
+    {
+        if (i != 0)
+            std::cout << ":";
+
+        std::cout << std::hex
+                  << std::setw(2)
+                  << std::setfill('0')
+                  << static_cast<int>(mac[i]);
+    }
+
+    std::cout << std::dec;
+}
 
 int main()
 {
@@ -17,6 +36,7 @@ int main()
     {
         std::cerr << "Error opening eth0: "
                   << error_buffer << std::endl;
+
         return 1;
     }
 
@@ -36,12 +56,101 @@ int main()
 
         if (result == 1)
         {
-            std::cout << "========================================\n";
+            std::cout << "\n========================================\n";
             std::cout << "Packet captured\n";
+            std::cout << "========================================\n";
+
             std::cout << "Length: "
                       << header->len
-                      << " bytes\n";
-            std::cout << "========================================\n";
+                      << " bytes\n\n";
+
+            /*
+             * Ethernet Header
+             */
+
+            const u_char* destination_mac = packet;
+            const u_char* source_mac = packet + 6;
+
+            uint16_t ether_type =
+                (static_cast<uint16_t>(packet[12]) << 8) |
+                static_cast<uint16_t>(packet[13]);
+
+            std::cout << "Ethernet\n";
+
+            std::cout << "  Source MAC:      ";
+            print_mac(source_mac);
+            std::cout << "\n";
+
+            std::cout << "  Destination MAC: ";
+            print_mac(destination_mac);
+            std::cout << "\n";
+
+            std::cout << "  EtherType:       0x"
+                      << std::hex
+                      << std::setw(4)
+                      << std::setfill('0')
+                      << ether_type
+                      << std::dec
+                      << "\n";
+
+            /*
+             * IPv4 packet
+             */
+
+            if (ether_type == 0x0800)
+            {
+                const struct ip* ip_header =
+                    reinterpret_cast<const struct ip*>(
+                        packet + 14
+                    );
+
+                char source_ip[INET_ADDRSTRLEN];
+                char destination_ip[INET_ADDRSTRLEN];
+
+                inet_ntop(
+                    AF_INET,
+                    &(ip_header->ip_src),
+                    source_ip,
+                    INET_ADDRSTRLEN
+                );
+
+                inet_ntop(
+                    AF_INET,
+                    &(ip_header->ip_dst),
+                    destination_ip,
+                    INET_ADDRSTRLEN
+                );
+
+                std::cout << "\nIPv4\n";
+
+                std::cout << "  Version:          "
+                          << static_cast<int>(ip_header->ip_v)
+                          << "\n";
+
+                std::cout << "  Header Length:    "
+                          << (ip_header->ip_hl * 4)
+                          << " bytes\n";
+
+                std::cout << "  Source IP:        "
+                          << source_ip
+                          << "\n";
+
+                std::cout << "  Destination IP:   "
+                          << destination_ip
+                          << "\n";
+
+                std::cout << "  TTL:              "
+                          << static_cast<int>(ip_header->ip_ttl)
+                          << "\n";
+
+                std::cout << "  Protocol:         "
+                          << static_cast<int>(ip_header->ip_p)
+                          << "\n";
+            }
+            else
+            {
+                std::cout << "\nNon-IPv4 packet\n";
+            }
         }
         else if (result == 0)
         {
@@ -52,6 +161,7 @@ int main()
             std::cerr << "Error reading packet: "
                       << pcap_geterr(handle)
                       << std::endl;
+
             break;
         }
         else if (result == -2)
