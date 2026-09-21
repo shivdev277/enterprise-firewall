@@ -2,6 +2,8 @@
 #include <iomanip>
 #include <pcap.h>
 #include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
 #include <arpa/inet.h>
 
 void print_mac(const u_char* mac)
@@ -64,10 +66,7 @@ int main()
                       << header->len
                       << " bytes\n\n";
 
-            /*
-             * Ethernet Header
-             */
-
+            // Ethernet Header
             const u_char* destination_mac = packet;
             const u_char* source_mac = packet + 6;
 
@@ -93,10 +92,7 @@ int main()
                       << std::dec
                       << "\n";
 
-            /*
-             * IPv4 packet
-             */
-
+            // IPv4
             if (ether_type == 0x0800)
             {
                 const struct ip* ip_header =
@@ -146,10 +142,67 @@ int main()
                 std::cout << "  Protocol:         "
                           << static_cast<int>(ip_header->ip_p)
                           << "\n";
+
+                // Calculate where the transport header starts
+                const u_char* transport_header =
+                    packet + 14 + (ip_header->ip_hl * 4);
+
+                // TCP
+                if (ip_header->ip_p == IPPROTO_TCP)
+                {
+                    const struct tcphdr* tcp_header =
+                        reinterpret_cast<const struct tcphdr*>(
+                            transport_header
+                        );
+
+                    std::cout << "\nTCP\n";
+
+                    std::cout << "  Source Port:      "
+                              << ntohs(tcp_header->source)
+                              << "\n";
+
+                    std::cout << "  Destination Port: "
+                              << ntohs(tcp_header->dest)
+                              << "\n";
+                }
+
+                // UDP
+                else if (ip_header->ip_p == IPPROTO_UDP)
+                {
+                    const struct udphdr* udp_header =
+                        reinterpret_cast<const struct udphdr*>(
+                            transport_header
+                        );
+
+                    std::cout << "\nUDP\n";
+
+                    std::cout << "  Source Port:      "
+                              << ntohs(udp_header->source)
+                              << "\n";
+
+                    std::cout << "  Destination Port: "
+                              << ntohs(udp_header->dest)
+                              << "\n";
+                }
+
+                // ICMP
+                else if (ip_header->ip_p == IPPROTO_ICMP)
+                {
+                    std::cout << "\nICMP\n";
+                }
+
+                else
+                {
+                    std::cout << "\nOther IPv4 protocol\n";
+                }
+            }
+            else if (ether_type == 0x0806)
+            {
+                std::cout << "\nARP\n";
             }
             else
             {
-                std::cout << "\nNon-IPv4 packet\n";
+                std::cout << "\nOther Ethernet protocol\n";
             }
         }
         else if (result == 0)
